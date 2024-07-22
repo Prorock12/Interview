@@ -8,16 +8,18 @@ namespace InterviewWebAPI.Repository
 {
     public interface IVacancyRepository
     {
-        public Task<List<Vacancy>> GetAllAsync();
-        public Task<Vacancy> GetItemAsync(int id);
-        public Task CreateVacancy(Vacancy vacancy);
-        public Task UpdateVacancyAsync(int id, Vacancy newVacancy);
-        public Task PatchVacancyAsync(int id, JsonPatchDocument<Vacancy> patchVacancy);
+        Task<List<Vacancy>> GetAllAsync();
+        Task<Vacancy> GetItemAsync(int id);
+        Task CreateAsync(Vacancy vacancy);
+        Task UpdateAsync(int id, Vacancy newVacancy);
+        Task PatchAsync(int id, JsonPatchDocument<Vacancy> patchVacancy);
+        List<Vacancy> SearchByDescription(string description);
+        Task<bool> DeleteAsync(int id);
     }
 
     public class VacancyRepository(InterviewDbContext dbContext) : IVacancyRepository
     {
-        public async Task CreateVacancy(Vacancy vacancy)
+        public async Task CreateAsync(Vacancy vacancy)
         {
             await dbContext.Vacancies.AddAsync(vacancy);
             await dbContext.SaveChangesAsync();
@@ -33,27 +35,42 @@ namespace InterviewWebAPI.Repository
             return await dbContext.Vacancies.FindAsync(id) ?? throw new ObjectNotFoundException();
         }
 
-        public async Task UpdateVacancyAsync(int id, Vacancy newVacancy)
+        public async Task UpdateAsync(int id, Vacancy newVacancy)
         {
             await dbContext.Vacancies.Where(x => x.VacancyId == id)
-                    .ExecuteUpdateAsync(x => x
-                        .SetProperty(y => y.Title, newVacancy.Title)
-                        .SetProperty(y => y.Description, newVacancy.Description)
-                        .SetProperty(y => y.ProposalCompensation, newVacancy.ProposalCompensation));
+                .ExecuteUpdateAsync(x => x
+                    .SetProperty(y => y.Title, newVacancy.Title)
+                    .SetProperty(y => y.Description, newVacancy.Description)
+                    .SetProperty(y => y.ProposalCompensation, newVacancy.ProposalCompensation));
         }
 
-        public async Task PatchVacancyAsync(int id, JsonPatchDocument<Vacancy> patchVacancy)
+        public async Task PatchAsync(int id, JsonPatchDocument<Vacancy> patchVacancy)
         {
             var vacancy = await dbContext.Vacancies.FindAsync(id);
             if (vacancy != null)
             {
-               var s = patchVacancy.Operations[0];
-                // await dbContext.Vacancies.Where(x => x.VacancyId == id)
-                //     .ExecuteUpdateAsync(x => x
-                //         .SetProperty(y => y.Title, newVacancy.Title)
-                //         .SetProperty(y => y.Description, newVacancy.Description)
-                //         .SetProperty(y => y.ProposalCompensation, newVacancy.ProposalCompensation));
+                patchVacancy.ApplyTo(vacancy);
+                await dbContext.SaveChangesAsync();
             }
+        }
+
+        public List<Vacancy> SearchByDescription(string description)
+        {
+            return dbContext.Vacancies
+                .Where(x => x.Description != null && EF.Functions.FreeText(x.Description, description)).ToList();
+        }
+
+        public async Task<bool> DeleteAsync(int id)
+        {
+            var record = await dbContext.Vacancies.FindAsync(id);
+            if (record == null)
+            {
+                return false;
+            }
+
+            dbContext.Vacancies.Remove(record);
+            await dbContext.SaveChangesAsync();
+            return true;
         }
     }
 }
